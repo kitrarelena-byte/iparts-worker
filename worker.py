@@ -1,41 +1,43 @@
-from fastapi import FastAPI
-from playwright.async_api import async_playwright
-
-app = FastAPI()
+import traceback
 
 @app.get("/search")
 async def search(q: str):
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage"]
-        )
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage"
+                ]
+            )
 
-        page = await browser.new_page()
+            page = await browser.new_page()
+            await page.goto(f"https://iparts.by/search/?q={q}", timeout=60000)
 
-        await page.goto(f"https://iparts.by/search/?q={q}", timeout=60000)
-        await page.wait_for_timeout(3000)
+            await page.wait_for_timeout(4000)
 
-        items = []
+            items = []
 
-        elements = await page.query_selector_all("div")
+            texts = await page.locator("div").all_inner_texts()
 
-        for el in elements:
-            text = await el.inner_text()
-
-            if "BYN" in text and len(text) < 200:
-                lines = text.split("\n")
-
-                if len(lines) >= 2:
+            for t in texts:
+                if "BYN" in t and len(t) < 200:
                     items.append({
-                        "name": lines[0],
-                        "price": lines[-1]
+                        "name": t[:80],
+                        "price": "BYN"
                     })
 
-            if len(items) >= 10:
-                break
+                if len(items) >= 10:
+                    break
 
-        await browser.close()
+            await browser.close()
 
-        return items
+            return items
+
+    except Exception as e:
+        return {
+            "error": str(e),
+            "trace": traceback.format_exc()
+        }
